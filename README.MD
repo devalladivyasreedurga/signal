@@ -1,7 +1,7 @@
 # UIC Signal Chat
 
 End-to-end encrypted chat implementing the Signal Protocol from scratch.
-Built for CS 487 — University of Illinois Chicago.
+Built for CS 588 — University of Illinois Chicago.
 
 ---
 
@@ -11,7 +11,7 @@ A full chat application where the server is a blind relay — it stores and
 delivers messages but can never read them. Only the two people in a
 conversation hold the keys needed to decrypt.
 
-### Crypto layer
+### Crypto layer (signal-chat folder)
 
 | File | What it does |
 |---|---|
@@ -28,7 +28,6 @@ allowed are AES-256-GCM and HKDF.
 
 ### Server layer (Flask + Redis + SQLite)
 
-The server never imports or calls any crypto code.
 
 - **SQLite** — stores users, public key bundles, and ciphertext blobs permanently
 - **Redis** — temporary offline message queue, drained on recipient login
