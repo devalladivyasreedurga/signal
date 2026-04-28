@@ -27,3 +27,10 @@ signal-chat/.venv/
 # Environment / secrets
 .env
 .env.*
+
+# Claude Code session data
+.claude/
+
+# Redis dump
+dump.rdb
+
