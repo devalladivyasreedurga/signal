@@ -88,7 +88,17 @@ class RatchetSession:
 
     def encrypt(self, plaintext: str) -> dict:
         if self.sending_chain_key is None:
-            raise RuntimeError("Sending chain not initialised")
+            # Receiver's first send: init already derived recv_chain via DH(bob_spk, alice_ratchet).
+            # Now generate a fresh send_ratchet and derive the sending chain only — no recv step.
+            if self.recv_ratchet_pub is None:
+                raise RuntimeError("Sending chain not initialised")
+            self.send_ratchet = DHKeyPair()
+            self.root_key, self.sending_chain_key = _kdf_rk(
+                self.root_key,
+                self.send_ratchet.dh(self.recv_ratchet_pub),
+            )
+            self.prev_send_count = 0
+            self.send_msg_num = 0
         self.sending_chain_key, mk = _kdf_ck(self.sending_chain_key)
         header = {
             "dh": self.send_ratchet.public_key,

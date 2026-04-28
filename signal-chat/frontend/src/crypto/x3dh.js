@@ -2,7 +2,7 @@
 // Mirrors crypto/x3dh.py exactly. All DH ops use dh.js (BigInt).
 // Only HKDF comes from WebCrypto (same rule as Python: only AES-GCM + HKDF allowed).
 
-import { DHKeyPair, hexToBigInt, bigIntToBytes } from "./dh.js";
+import { DHKeyPair, hexToBigInt, bigIntToBytes, bytesToHex } from "./dh.js";
 
 const X3DH_INFO = new TextEncoder().encode("UIC-Signal-X3DH-v1");
 const F = new Uint8Array(32).fill(0xff);  // same padding as Python
@@ -45,7 +45,20 @@ export async function x3dhSender(senderIK, recipientBundle) {
   const km = concat(F, dh1, dh2, dh3, dh4);
   const sk = await hkdf(km);
 
-  return { sk, ekPub: ek.publicKey, senderIKPub: senderIK.publicKey };
+  return {
+    sk,
+    ekPub:       ek.publicKey,
+    senderIKPub: senderIK.publicKey,
+    opkPubUsed:  recipientBundle.opk_pub,  // so Bob can find the right OPK private key
+    debug: {
+      role: "initiator",
+      dh1: { label: "DH(sender_IK,  recipient_SPK)", hex: bytesToHex(dh1).slice(0, 32) + "…" },
+      dh2: { label: "DH(sender_EK,  recipient_IK)",  hex: bytesToHex(dh2).slice(0, 32) + "…" },
+      dh3: { label: "DH(sender_EK,  recipient_SPK)", hex: bytesToHex(dh3).slice(0, 32) + "…" },
+      dh4: { label: "DH(sender_EK,  recipient_OPK)", hex: bytesToHex(dh4).slice(0, 32) + "…" },
+      sk:  bytesToHex(sk),
+    },
+  };
 }
 
 // Receiver-side X3DH (Bob's browser)
@@ -63,5 +76,16 @@ export async function x3dhReceiver(receiverKeys, senderIKPubHex, ekPubHex) {
   const dh4 = receiverKeys.opk.dh(ek);     // DH(recipient_OPK, sender_EK)
 
   const km = concat(F, dh1, dh2, dh3, dh4);
-  return await hkdf(km);
+  const sk = await hkdf(km);
+  return {
+    sk,
+    debug: {
+      role: "responder",
+      dh1: { label: "DH(recipient_SPK, sender_IK)",  hex: bytesToHex(dh1).slice(0, 32) + "…" },
+      dh2: { label: "DH(recipient_IK,  sender_EK)",  hex: bytesToHex(dh2).slice(0, 32) + "…" },
+      dh3: { label: "DH(recipient_SPK, sender_EK)",  hex: bytesToHex(dh3).slice(0, 32) + "…" },
+      dh4: { label: "DH(recipient_OPK, sender_EK)",  hex: bytesToHex(dh4).slice(0, 32) + "…" },
+      sk:  bytesToHex(sk),
+    },
+  };
 }

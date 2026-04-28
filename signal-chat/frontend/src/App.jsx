@@ -8,9 +8,9 @@ const API = "http://localhost:5001";
 
 function storeKeys(netId, keys) {
   localStorage.setItem(`signal_keys_${netId}`, JSON.stringify({
-    ik:  keys.ik.toJSON(),
-    spk: keys.spk.toJSON(),
-    opk: keys.opk.toJSON(),
+    ik:   keys.ik.toJSON(),
+    spk:  keys.spk.toJSON(),
+    opks: keys.opks.map(k => k.toJSON()),  // store all OPKs
   }));
 }
 
@@ -18,11 +18,37 @@ export function loadKeys(netId) {
   const raw = localStorage.getItem(`signal_keys_${netId}`);
   if (!raw) return null;
   const d = JSON.parse(raw);
+  const opks = d.opks
+    ? d.opks.map(k => DHKeyPair.fromJSON(k))
+    : [DHKeyPair.fromJSON(d.opk)];  // backwards compat
   return {
-    ik:  DHKeyPair.fromJSON(d.ik),
-    spk: DHKeyPair.fromJSON(d.spk),
-    opk: DHKeyPair.fromJSON(d.opk),
+    ik:   DHKeyPair.fromJSON(d.ik),
+    spk:  DHKeyPair.fromJSON(d.spk),
+    opks,
+    // opk returns the first one by default (used by x3dhReceiver lookup)
+    get opk() { return opks[0]; },
   };
+}
+
+// Find the OPK private key matching a given public key hex
+export function findOpk(netId, opkPubHex) {
+  const keys = loadKeys(netId);
+  if (!keys) return null;
+  return keys.opks.find(k => bigIntToHex(k.publicKey) === opkPubHex) ?? null;
+}
+
+// Clear all session state for a user (called on re-registration)
+function clearSessionState(netId) {
+  const toDelete = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key.startsWith(`ratchet_${netId}_`) ||
+        key.startsWith(`init_sent_${netId}_`) ||
+        key.startsWith(`messages_${netId}_`)) {
+      toDelete.push(key);
+    }
+  }
+  toDelete.forEach(k => localStorage.removeItem(k));
 }
 
 // ── App ───────────────────────────────────────────────────────────
@@ -61,8 +87,10 @@ export default function App() {
       const data = await res.json();
       if (!res.ok) { setError(data.error); return; }
 
+      // Clear stale sessions from any previous registration
+      clearSessionState(netId.trim().toLowerCase());
       // Private keys never leave the browser — stored in localStorage only
-      storeKeys(netId.trim().toLowerCase(), { ik, spk, opk: opks[0] });
+      storeKeys(netId.trim().toLowerCase(), { ik, spk, opks });
       setMode("login");
       setError("Registered! Please log in.");
     } catch {

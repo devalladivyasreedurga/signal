@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import socket from "./socket";
-import { loadKeys } from "./App";
+import { loadKeys, findOpk } from "./App";
 import { DHKeyPair, hexToBigInt } from "./crypto/dh.js";
 import { x3dhSender, x3dhReceiver } from "./crypto/x3dh.js";
 import { RatchetSession } from "./crypto/ratchet.js";
+import DevPanel from "./DevPanel.jsx";
 
 const API = "http://localhost:5001";
 
@@ -46,6 +47,8 @@ export default function Chat({ user, onLogout }) {
   const [fingerprint, setFingerprint] = useState(user.fingerprint || "");
   const [sessionFPs, setSessionFPs] = useState({});   // peer -> fingerprint string
   const [connected, setConnected]   = useState(false);
+  const [devSessions, setDevSessions] = useState({});  // peer -> session snapshot for DevPanel
+  const [messageLog, setMessageLog]   = useState([]);  // [{dir,plaintext,ciphertext,header,ts}]
   const bottomRef = useRef(null);
 
   // Always-current sessions map for socket handler
@@ -77,7 +80,7 @@ export default function Chat({ user, onLogout }) {
     const bundle = await res.json();
     if (!bundle.ik_pub) throw new Error("No bundle for peer");
 
-    const { sk, ekPub, senderIKPub } = await x3dhSender(myKeys.ik, bundle);
+    const { sk, ekPub, senderIKPub, opkPubUsed, debug: x3dhDebug } = await x3dhSender(myKeys.ik, bundle);
 
     const sess = new RatchetSession();
     await sess.initSender(sk, hexToBigInt(bundle.spk_pub));
@@ -86,8 +89,13 @@ export default function Chat({ user, onLogout }) {
     sess._initHeader = {
       ek_pub:        ekPub.toString(16),
       sender_ik_pub: senderIKPub.toString(16),
+      opk_pub_used:  opkPubUsed,   // so Bob can find the right OPK private key
     };
     sess._peerBundle = bundle;
+    sess._x3dhDebug  = x3dhDebug;
+
+    // Clear init_sent so the new session_init header is always sent with first message
+    localStorage.removeItem(`init_sent_${user.net_id}_${peer}`);
 
     saveSession(user.net_id, peer, sess);
     sessionsRef.current[peer] = sess;
@@ -101,14 +109,22 @@ export default function Chat({ user, onLogout }) {
     const myKeys = loadKeys(user.net_id);
     if (!myKeys) throw new Error("No local keys — re-register");
 
-    const sk = await x3dhReceiver(
-      myKeys,
+    // Find the exact OPK private key Alice used — identified by opk_pub_used in the header
+    const opkKey = sessionInit.opk_pub_used
+      ? (findOpk(user.net_id, sessionInit.opk_pub_used) ?? myKeys.opk)
+      : myKeys.opk;
+
+    const receiverKeys = { ik: myKeys.ik, spk: myKeys.spk, opk: opkKey };
+
+    const { sk, debug: x3dhDebug } = await x3dhReceiver(
+      receiverKeys,
       sessionInit.sender_ik_pub,
       sessionInit.ek_pub,
     );
 
     const sess = new RatchetSession();
     await sess.initReceiver(sk, hexToBigInt(ratchetPubHex), myKeys.spk);
+    sess._x3dhDebug = x3dhDebug;
 
     saveSession(user.net_id, peer, sess);
     sessionsRef.current[peer] = sess;
@@ -137,13 +153,14 @@ export default function Chat({ user, onLogout }) {
     socket.on("authenticated", d => setFingerprint(d.fingerprint));
 
     socket.on("message", async (msg) => {
-      const { id: msgId, sender, payload } = msg;
+      const { id: msgId, sender, payload, ts: msgTs } = msg;
       let plaintext;
       try {
         let sess = sessionsRef.current[sender];
 
-        if (payload.session_init && !sess) {
-          // First message from this sender — run X3DH receiver-side
+        if (payload.session_init) {
+          // session_init present means sender started a fresh X3DH session —
+          // always rebuild, even if a stale session exists in memory/localStorage
           sess = await buildReceiverSession(
             sender,
             payload.session_init,
@@ -167,7 +184,9 @@ export default function Chat({ user, onLogout }) {
         console.error("Decrypt error:", err);
         plaintext = "[decryption failed]";
       }
-      appendMessage(sender, { id: msgId, from: sender, text: plaintext, ts: Date.now() });
+      logMessage("in", payload);
+      snapSession(sender);
+      appendMessage(sender, { id: msgId, from: sender, text: plaintext, ts: msgTs ?? Date.now() });
     });
 
     return () => {
@@ -190,6 +209,20 @@ export default function Chat({ user, onLogout }) {
     const t = setInterval(load, 3000);
     return () => clearInterval(t);
   }, [user]);
+
+  function snapSession(peer) {
+    const sess = sessionsRef.current[peer];
+    if (sess) setDevSessions(prev => ({ ...prev, [peer]: sess }));
+  }
+
+  function logMessage(dir, encrypted) {
+    setMessageLog(prev => [{
+      dir,
+      ciphertext: encrypted?.ciphertext,
+      header:     encrypted?.header,
+      ts: Date.now(),
+    }, ...prev].slice(0, 50));
+  }
 
   // ── Select conversation — load history synchronously ─────────
 
@@ -238,14 +271,18 @@ export default function Chat({ user, onLogout }) {
       saveSession(user.net_id, selected, sess);
 
       const msgId = crypto.randomUUID();
+      const ts = Date.now();
       socket.emit("send_message", {
         sender:    user.net_id,
         recipient: selected,
         payload,
+        ts,
       });
 
       // Sender records their own message with the same ID structure
-      appendMessage(selected, { id: msgId, from: user.net_id, text: input.trim(), ts: Date.now() });
+      logMessage("out", payload);
+      snapSession(selected);
+      appendMessage(selected, { id: msgId, from: user.net_id, text: input.trim(), ts });
       setInput("");
     } catch (err) {
       console.error("Encrypt error:", err);
@@ -257,6 +294,7 @@ export default function Chat({ user, onLogout }) {
   // ── Render ────────────────────────────────────────────────────
 
   return (
+    <>
     <div className="flex h-screen bg-[#0a1628] text-white font-mono">
       {/* Sidebar */}
       <aside className="w-64 border-r border-[#cc0000]/30 flex flex-col">
@@ -350,6 +388,14 @@ export default function Chat({ user, onLogout }) {
           </>
         )}
       </main>
-    </div>
+    </div>  {/* end flex h-screen */}
+
+    <DevPanel
+      user={user}
+      selected={selected}
+      sessions={devSessions}
+      messageLog={messageLog}
+    />
+    </>
   );
 }

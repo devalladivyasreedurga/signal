@@ -153,11 +153,12 @@ def on_send(data):
     recipient = data.get("recipient")
     sender = data.get("sender")
     payload = data.get("payload")
+    ts = data.get("ts")
 
     if not all([recipient, sender, payload]):
         return
 
-    msg = {"id": str(uuid.uuid4()), "sender": sender, "payload": payload}
+    msg = {"id": str(uuid.uuid4()), "sender": sender, "payload": payload, "ts": ts}
     save_message(sender, recipient, json.dumps(payload))
     sid = _online.get(recipient)
     if sid:
