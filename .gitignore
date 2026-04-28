@@ -1,0 +1,29 @@
+# Python
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# SQLite database — contains user data
+signal-chat/server/signal.db
+
+# Redis dump
+dump.rdb
+
+# Logs
+*.log
+
+# Frontend
+signal-chat/frontend/node_modules/
+signal-chat/frontend/dist/
+signal-chat/frontend/.vite/
+
+# Python venv inside signal-chat
+signal-chat/.venv/
+
+# macOS
+.DS_Store
+
+# Environment / secrets
+.env
+.env.*
