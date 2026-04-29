@@ -36,6 +36,122 @@ function wasInitSent(myId, peerId) {
   return !!localStorage.getItem(`init_sent_${myId}_${peerId}`);
 }
 
+// ── Sky background (pixel art) ────────────────────────────────────
+
+function SkyBackground() {
+  return (
+    <>
+      <style>{`
+        @keyframes birdFly {
+          from { transform: translateX(-60px); }
+          to   { transform: translateX(calc(100vw + 60px)); }
+        }
+        @keyframes cloudDrift1 {
+          0%, 100% { transform: translateX(0px); }
+          50%      { transform: translateX(20px); }
+        }
+        @keyframes cloudDrift2 {
+          0%, 100% { transform: translateX(0px); }
+          50%      { transform: translateX(-14px); }
+        }
+      `}</style>
+
+      <div
+        className="fixed inset-0"
+        style={{
+          zIndex: 0,
+          background: "linear-gradient(to bottom, #0284c7 0%, #0ea5e9 20%, #38bdf8 48%, #7dd3fc 72%, #bae6fd 100%)",
+        }}
+      >
+        {/* Cloud 1 — large, left (pixel art stacked rects, P=8) */}
+        <div style={{ position:"absolute", top:"7%", left:"5%", animation:"cloudDrift1 14s ease-in-out infinite" }}>
+          <svg width="112" height="40" viewBox="0 0 112 40" shapeRendering="crispEdges">
+            <rect x="24" y="0"  width="64" height="8" fill="white" opacity="0.96"/>
+            <rect x="16" y="8"  width="80" height="8" fill="white" opacity="0.96"/>
+            <rect x="8"  y="16" width="96" height="8" fill="white" opacity="0.96"/>
+            <rect x="0"  y="24" width="112" height="8" fill="white" opacity="0.96"/>
+            <rect x="0"  y="32" width="112" height="8" fill="white" opacity="0.96"/>
+          </svg>
+        </div>
+
+        {/* Cloud 2 — medium, right (P=7) */}
+        <div style={{ position:"absolute", top:"16%", right:"9%", animation:"cloudDrift2 19s ease-in-out infinite 3s" }}>
+          <svg width="84" height="28" viewBox="0 0 84 28" shapeRendering="crispEdges">
+            <rect x="14" y="0"  width="56" height="7" fill="white" opacity="0.90"/>
+            <rect x="7"  y="7"  width="70" height="7" fill="white" opacity="0.90"/>
+            <rect x="0"  y="14" width="84" height="7" fill="white" opacity="0.90"/>
+            <rect x="0"  y="21" width="84" height="7" fill="white" opacity="0.90"/>
+          </svg>
+        </div>
+
+        {/* Cloud 3 — small, top-center (P=5) */}
+        <div style={{ position:"absolute", top:"4%", left:"42%", animation:"cloudDrift1 24s ease-in-out infinite 7s" }}>
+          <svg width="60" height="20" viewBox="0 0 60 20" shapeRendering="crispEdges">
+            <rect x="10" y="0"  width="40" height="5" fill="white" opacity="0.84"/>
+            <rect x="5"  y="5"  width="50" height="5" fill="white" opacity="0.84"/>
+            <rect x="0"  y="10" width="60" height="5" fill="white" opacity="0.84"/>
+            <rect x="0"  y="15" width="60" height="5" fill="white" opacity="0.84"/>
+          </svg>
+        </div>
+
+        {/* Cloud 4 — medium, mid-screen left (P=6) */}
+        <div style={{ position:"absolute", top:"38%", left:"2%", animation:"cloudDrift2 17s ease-in-out infinite 4s" }}>
+          <svg width="96" height="30" viewBox="0 0 96 30" shapeRendering="crispEdges">
+            <rect x="18" y="0"  width="60" height="6" fill="white" opacity="0.88"/>
+            <rect x="12" y="6"  width="72" height="6" fill="white" opacity="0.88"/>
+            <rect x="6"  y="12" width="84" height="6" fill="white" opacity="0.88"/>
+            <rect x="0"  y="18" width="96" height="6" fill="white" opacity="0.88"/>
+            <rect x="0"  y="24" width="96" height="6" fill="white" opacity="0.88"/>
+          </svg>
+        </div>
+
+        {/* Cloud 5 — tiny wisp, mid-right (P=4) */}
+        <div style={{ position:"absolute", top:"32%", right:"18%", animation:"cloudDrift1 20s ease-in-out infinite 1s" }}>
+          <svg width="44" height="16" viewBox="0 0 44 16" shapeRendering="crispEdges">
+            <rect x="8"  y="0"  width="28" height="4" fill="white" opacity="0.78"/>
+            <rect x="4"  y="4"  width="36" height="4" fill="white" opacity="0.78"/>
+            <rect x="0"  y="8"  width="44" height="4" fill="white" opacity="0.78"/>
+            <rect x="0"  y="12" width="44" height="4" fill="white" opacity="0.78"/>
+          </svg>
+        </div>
+
+        {/* Cloud 6 — large, lower-center (P=9) */}
+        <div style={{ position:"absolute", top:"55%", left:"28%", animation:"cloudDrift2 22s ease-in-out infinite 5s" }}>
+          <svg width="126" height="45" viewBox="0 0 126 45" shapeRendering="crispEdges">
+            <rect x="27" y="0"  width="72" height="9" fill="white" opacity="0.82"/>
+            <rect x="18" y="9"  width="90" height="9" fill="white" opacity="0.82"/>
+            <rect x="9"  y="18" width="108" height="9" fill="white" opacity="0.82"/>
+            <rect x="0"  y="27" width="126" height="9" fill="white" opacity="0.82"/>
+            <rect x="0"  y="36" width="126" height="9" fill="white" opacity="0.82"/>
+          </svg>
+        </div>
+
+        {/* Cloud 7 — small, lower-right (P=5) */}
+        <div style={{ position:"absolute", top:"62%", right:"5%", animation:"cloudDrift1 16s ease-in-out infinite 9s" }}>
+          <svg width="60" height="20" viewBox="0 0 60 20" shapeRendering="crispEdges">
+            <rect x="10" y="0"  width="40" height="5" fill="white" opacity="0.80"/>
+            <rect x="5"  y="5"  width="50" height="5" fill="white" opacity="0.80"/>
+            <rect x="0"  y="10" width="60" height="5" fill="white" opacity="0.80"/>
+            <rect x="0"  y="15" width="60" height="5" fill="white" opacity="0.80"/>
+          </svg>
+        </div>
+
+        {/* Bird — smooth SVG path (same as original) */}
+        <div style={{ position:"absolute", top:"21%", left:0, animation:"birdFly 34s linear infinite 1s" }}>
+          <svg width="50" height="28" viewBox="0 0 50 28">
+            <ellipse cx="25" cy="16" rx="5" ry="3" fill="#0c2340"/>
+            <circle cx="22" cy="12" r="3.5" fill="#0c2340"/>
+            <path d="M19,12 L15,13" stroke="#0c2340" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
+            <path d="M20,16 Q12,6 3,10" stroke="#0c2340" strokeWidth="3" fill="none" strokeLinecap="round"/>
+            <path d="M30,16 Q38,6 47,10" stroke="#0c2340" strokeWidth="3" fill="none" strokeLinecap="round"/>
+            <path d="M30,17 Q35,21 38,17 Q35,23 30,19" fill="#0c2340"/>
+          </svg>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── Chat ──────────────────────────────────────────────────────────
 
 export default function Chat({ user, onLogout }) {
@@ -147,8 +263,9 @@ export default function Chat({ user, onLogout }) {
   // ── Socket ────────────────────────────────────────────────────
 
   useEffect(() => {
-    socket.on("connect",    () => { setConnected(true); socket.emit("authenticate", { net_id: user.net_id }); });
-    socket.on("disconnect", () => setConnected(false));
+    socket.on("connect",       () => { setConnected(true); socket.emit("authenticate", { net_id: user.net_id }); });
+    socket.on("disconnect",    () => setConnected(false));
+    socket.on("online_update", setOnlineUsers);
     socket.connect();
     socket.on("authenticated", d => setFingerprint(d.fingerprint));
 
@@ -192,6 +309,7 @@ export default function Chat({ user, onLogout }) {
     return () => {
       socket.off("connect");
       socket.off("disconnect");
+      socket.off("online_update");
       socket.off("authenticated");
       socket.off("message");
       socket.disconnect();
@@ -295,27 +413,29 @@ export default function Chat({ user, onLogout }) {
 
   return (
     <>
-    <div className="flex h-screen bg-[#0a1628] text-white font-mono">
+    <SkyBackground />
+
+    <div className="flex h-screen text-black font-mono" style={{ position: "relative", zIndex: 1 }}>
       {/* Sidebar */}
-      <aside className="w-64 border-r border-[#cc0000]/30 flex flex-col">
-        <div className="p-4 border-b border-[#cc0000]/30">
+      <aside className="w-64 border-r border-sky-200 flex flex-col" style={{ background: "rgba(255,255,255,0.92)" }}>
+        <div className="p-4 border-b border-sky-100">
           <div className="flex items-center gap-2">
-            <div className="text-[#cc0000] font-bold text-lg">UIC Signal</div>
-            <span className={`w-2 h-2 rounded-full ${connected ? "bg-green-400" : "bg-red-500"}`}
+            <div className="text-sky-600 font-bold text-lg">UIC Signal</div>
+            <span className={`w-2 h-2 rounded-full ${connected ? "bg-green-400" : "bg-red-400"}`}
                   title={connected ? "Connected" : "Disconnected — reconnecting…"} />
           </div>
-          <div className="text-xs text-gray-400 mt-1 truncate">@{user.net_id}</div>
-          <div className="text-[10px] text-gray-500 mt-1 break-all">FP: {fingerprint}</div>
+          <div className="text-xs text-slate-500 mt-1 truncate">@{user.net_id}</div>
+          <div className="text-[10px] text-slate-400 mt-1 break-all">FP: {fingerprint}</div>
           <button
             onClick={onLogout}
-            className="mt-2 text-xs text-gray-500 hover:text-[#cc0000] transition"
+            className="mt-2 text-xs text-slate-400 hover:text-red-400 transition"
           >
             logout
           </button>
         </div>
         <div className="flex-1 overflow-y-auto">
           {users.length === 0 && (
-            <div className="p-4 text-xs text-gray-500">No other users yet</div>
+            <div className="p-4 text-xs text-slate-400">No other users yet</div>
           )}
           {users.map(u => {
             const isOnline = onlineUsers.includes(u);
@@ -323,13 +443,13 @@ export default function Chat({ user, onLogout }) {
               <button
                 key={u}
                 onClick={() => selectPeer(u)}
-                className={`w-full text-left px-4 py-3 text-sm border-b border-[#cc0000]/10 transition
-                  ${selected === u ? "bg-[#cc0000]/20 text-white" : "hover:bg-white/5 text-gray-300"}`}
+                className={`w-full text-left px-4 py-3 text-sm border-b border-sky-50 transition
+                  ${selected === u ? "bg-sky-100 text-sky-700" : "hover:bg-sky-50/80 text-slate-600"}`}
               >
                 <span className="inline-flex items-center gap-2 w-full">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isOnline ? "bg-green-400" : "bg-gray-600"}`} />
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isOnline ? "bg-green-400" : "bg-slate-300"}`} />
                   <span className="truncate">{u}</span>
-                  {isOnline && <span className="ml-auto text-[10px] text-green-400">online</span>}
+                  {isOnline && <span className="ml-auto text-[10px] text-green-500">online</span>}
                 </span>
               </button>
             );
@@ -337,30 +457,33 @@ export default function Chat({ user, onLogout }) {
         </div>
       </aside>
 
-      {/* Chat area */}
+      {/* Chat area — transparent so the sky shows through */}
       <main className="flex-1 flex flex-col">
         {!selected ? (
-          <div className="flex-1 flex items-center justify-center text-gray-500 text-sm">
+          <div className="flex-1 flex items-center justify-center text-white/80 text-sm drop-shadow">
             Select a conversation
           </div>
         ) : (
           <>
-            <header className="px-6 py-3 border-b border-[#cc0000]/30 flex items-center gap-3">
-              <span className="text-[#cc0000] font-bold">@{selected}</span>
+            <header className="px-6 py-3 border-b border-sky-200 flex items-center gap-3"
+                    style={{ background: "rgba(255,255,255,0.90)" }}>
+              <span className="text-sky-700 font-bold">@{selected}</span>
               {sessionFPs[selected] && (
-                <span className="text-[10px] text-gray-400">
+                <span className="text-[10px] text-slate-400">
                   🔑 {sessionFPs[selected]}
                 </span>
               )}
-              <span className="ml-auto text-[10px] text-green-500">AES-256-GCM</span>
+              <span className="ml-auto text-[10px] text-green-600">AES-256-GCM</span>
             </header>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-3">
               {msgs.map((m, i) => (
                 <div key={i} className={`flex ${m.from === user.net_id ? "justify-end" : "justify-start"}`}>
-                  <div className={`max-w-[70%] px-4 py-2 rounded-lg text-sm
-                    ${m.from === user.net_id ? "bg-[#cc0000] text-white" : "bg-[#1a2a4a] text-gray-100"}`}>
-                    <span className="mr-1">🔒</span>{m.text}
+                  <div className={`max-w-[70%] px-4 py-2 rounded-xl text-sm shadow-sm
+                    ${m.from === user.net_id
+                      ? "bg-sky-500 text-white"
+                      : "bg-white/90 text-black border border-sky-100"}`}>
+                    {m.text}
                     <div className="text-[10px] mt-1 opacity-50 text-right">
                       {new Date(m.ts).toLocaleTimeString()}
                     </div>
@@ -370,17 +493,18 @@ export default function Chat({ user, onLogout }) {
               <div ref={bottomRef} />
             </div>
 
-            <form onSubmit={sendMessage} className="p-4 border-t border-[#cc0000]/30 flex gap-2">
+            <form onSubmit={sendMessage} className="p-4 border-t border-sky-200 flex gap-2"
+                  style={{ background: "rgba(255,255,255,0.90)" }}>
               <input
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 placeholder="Type a message…"
-                className="flex-1 bg-[#1a2a4a] border border-[#cc0000]/30 rounded px-4 py-2 text-sm
-                           text-white placeholder-gray-500 focus:outline-none focus:border-[#cc0000]"
+                className="flex-1 bg-sky-50 border border-sky-200 rounded-lg px-4 py-2 text-sm
+                           text-black placeholder-slate-400 focus:outline-none focus:border-sky-400"
               />
               <button
                 type="submit"
-                className="bg-[#cc0000] hover:bg-[#aa0000] px-4 py-2 rounded text-sm font-bold transition"
+                className="bg-red-400 hover:bg-red-500 px-4 py-2 rounded-lg text-sm font-bold text-white transition shadow-sm"
               >
                 Send
               </button>
@@ -388,7 +512,7 @@ export default function Chat({ user, onLogout }) {
           </>
         )}
       </main>
-    </div>  {/* end flex h-screen */}
+    </div>
 
     <DevPanel
       user={user}

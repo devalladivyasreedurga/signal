@@ -10,7 +10,7 @@ function storeKeys(netId, keys) {
   localStorage.setItem(`signal_keys_${netId}`, JSON.stringify({
     ik:   keys.ik.toJSON(),
     spk:  keys.spk.toJSON(),
-    opks: keys.opks.map(k => k.toJSON()),  // store all OPKs
+    opks: keys.opks.map(k => k.toJSON()),
   }));
 }
 
@@ -20,24 +20,21 @@ export function loadKeys(netId) {
   const d = JSON.parse(raw);
   const opks = d.opks
     ? d.opks.map(k => DHKeyPair.fromJSON(k))
-    : [DHKeyPair.fromJSON(d.opk)];  // backwards compat
+    : [DHKeyPair.fromJSON(d.opk)];
   return {
     ik:   DHKeyPair.fromJSON(d.ik),
     spk:  DHKeyPair.fromJSON(d.spk),
     opks,
-    // opk returns the first one by default (used by x3dhReceiver lookup)
     get opk() { return opks[0]; },
   };
 }
 
-// Find the OPK private key matching a given public key hex
 export function findOpk(netId, opkPubHex) {
   const keys = loadKeys(netId);
   if (!keys) return null;
   return keys.opks.find(k => bigIntToHex(k.publicKey) === opkPubHex) ?? null;
 }
 
-// Clear all session state for a user (called on re-registration)
 function clearSessionState(netId) {
   const toDelete = [];
   for (let i = 0; i < localStorage.length; i++) {
@@ -54,42 +51,36 @@ function clearSessionState(netId) {
 // ── App ───────────────────────────────────────────────────────────
 
 export default function App() {
-  const [user, setUser]       = useState(null);
-  const [mode, setMode]       = useState("login");
-  const [netId, setNetId]     = useState("");
+  const [user, setUser]         = useState(null);
+  const [mode, setMode]         = useState("login");
+  const [netId, setNetId]       = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError]     = useState("");
-  const [loading, setLoading] = useState(false);
+  const [error, setError]       = useState("");
+  const [loading, setLoading]   = useState(false);
 
   async function handleRegister(e) {
     e.preventDefault();
     setError(""); setLoading(true);
     try {
-      // Generate real DH key pairs in the browser
       const ik  = new DHKeyPair();
       const spk = new DHKeyPair();
-      const opk = new DHKeyPair();
-
-      // Generate a pool of one-time prekeys so bundle fetches don't exhaust supply
       const opks = Array.from({ length: 10 }, () => new DHKeyPair());
 
       const res = await fetch(`${API}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          net_id:  netId.trim().toLowerCase(),
+          net_id:   netId.trim().toLowerCase(),
           password,
-          ik_pub:  bigIntToHex(ik.publicKey),
-          spk_pub: bigIntToHex(spk.publicKey),
+          ik_pub:   bigIntToHex(ik.publicKey),
+          spk_pub:  bigIntToHex(spk.publicKey),
           opk_pubs: opks.map(k => bigIntToHex(k.publicKey)),
         }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error); return; }
 
-      // Clear stale sessions from any previous registration
       clearSessionState(netId.trim().toLowerCase());
-      // Private keys never leave the browser — stored in localStorage only
       storeKeys(netId.trim().toLowerCase(), { ik, spk, opks });
       setMode("login");
       setError("Registered! Please log in.");
@@ -105,13 +96,11 @@ export default function App() {
     setError(""); setLoading(true);
     const id = netId.trim().toLowerCase();
     try {
-      // Check private keys exist on this device before even hitting the server
       const keys = loadKeys(id);
       if (!keys) {
         setError("No keys found for this NetID on this device. Register first.");
         return;
       }
-
       const res = await fetch(`${API}/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -130,24 +119,25 @@ export default function App() {
   if (user) return <Chat user={user} onLogout={() => setUser(null)} />;
 
   return (
-    <div className="min-h-screen bg-[#0a1628] flex items-center justify-center font-mono">
+    <div className="min-h-screen flex items-center justify-center font-mono"
+         style={{ background: "linear-gradient(to bottom, #0284c7 0%, #0ea5e9 20%, #38bdf8 48%, #7dd3fc 72%, #bae6fd 100%)" }}>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <div className="text-[#cc0000] text-4xl font-bold tracking-tight">UIC Signal</div>
-          <div className="text-gray-400 text-sm mt-1">End-to-end encrypted chat</div>
-          <div className="text-gray-600 text-xs mt-1">University of Illinois Chicago</div>
+          <div className="text-white text-4xl font-bold tracking-tight drop-shadow-md">UIC Signal</div>
+          <div className="text-white/80 text-sm mt-1">End-to-end encrypted chat</div>
+          <div className="text-white/60 text-xs mt-1">University of Illinois Chicago</div>
         </div>
 
-        <div className="bg-[#0f1f3d] border border-[#cc0000]/30 rounded-xl p-8">
-          <div className="flex mb-6 border-b border-[#cc0000]/20">
+        <div className="bg-white border border-sky-200 rounded-xl p-8 shadow-sm">
+          <div className="flex mb-6 border-b border-sky-100">
             {["login", "register"].map(m => (
               <button
                 key={m}
                 onClick={() => { setMode(m); setError(""); }}
                 className={`flex-1 pb-2 text-sm capitalize transition
                   ${mode === m
-                    ? "text-[#cc0000] border-b-2 border-[#cc0000]"
-                    : "text-gray-500 hover:text-gray-300"}`}
+                    ? "text-sky-500 border-b-2 border-sky-500"
+                    : "text-slate-400 hover:text-slate-600"}`}
               >
                 {m}
               </button>
@@ -156,33 +146,33 @@ export default function App() {
 
           <form onSubmit={mode === "login" ? handleLogin : handleRegister} className="space-y-4">
             <div>
-              <label className="block text-xs text-gray-400 mb-1">NetID</label>
+              <label className="block text-xs text-slate-500 mb-1">NetID</label>
               <input
                 value={netId}
                 onChange={e => setNetId(e.target.value)}
                 placeholder="e.g. jdoe3"
                 required
-                className="w-full bg-[#0a1628] border border-[#cc0000]/30 rounded px-3 py-2 text-sm
-                           text-white placeholder-gray-600 focus:outline-none focus:border-[#cc0000]"
+                className="w-full bg-sky-50 border border-sky-200 rounded px-3 py-2 text-sm
+                           text-black placeholder-slate-400 focus:outline-none focus:border-sky-400"
               />
             </div>
             <div>
-              <label className="block text-xs text-gray-400 mb-1">Password</label>
+              <label className="block text-xs text-slate-500 mb-1">Password</label>
               <input
                 type="password"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
                 required
-                className="w-full bg-[#0a1628] border border-[#cc0000]/30 rounded px-3 py-2 text-sm
-                           text-white placeholder-gray-600 focus:outline-none focus:border-[#cc0000]"
+                className="w-full bg-sky-50 border border-sky-200 rounded px-3 py-2 text-sm
+                           text-black placeholder-slate-400 focus:outline-none focus:border-sky-400"
               />
             </div>
 
             {error && (
               <div className={`text-xs px-3 py-2 rounded ${
                 error.startsWith("Registered")
-                  ? "text-green-400 bg-green-900/20"
-                  : "text-[#cc0000] bg-[#cc0000]/10"
+                  ? "text-green-700 bg-green-50 border border-green-200"
+                  : "text-red-400 bg-red-50 border border-red-200"
               }`}>
                 {error}
               </div>
@@ -191,15 +181,15 @@ export default function App() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-[#cc0000] hover:bg-[#aa0000] disabled:opacity-50
-                         py-2 rounded text-sm font-bold transition"
+              className="w-full bg-sky-500 hover:bg-sky-600 disabled:opacity-50
+                         py-2 rounded text-sm font-bold text-white transition"
             >
               {loading ? "…" : mode === "login" ? "Sign In" : "Create Account"}
             </button>
           </form>
         </div>
 
-        <div className="text-center mt-4 text-gray-600 text-xs">
+        <div className="text-center mt-4 text-white/70 text-xs">
           🔒 Signal Protocol · Double Ratchet · X3DH · AES-256-GCM
         </div>
       </div>

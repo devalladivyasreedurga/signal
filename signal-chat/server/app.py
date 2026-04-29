@@ -139,6 +139,8 @@ def on_auth(data):
     for msg in pending:
         emit("message", msg)
     emit("authenticated", {"net_id": net_id, "fingerprint": user["fingerprint"]})
+    # Broadcast updated online list to all connected clients
+    socketio.emit("online_update", list(_online.keys()))
 
 
 @socketio.on("disconnect")
@@ -146,6 +148,8 @@ def on_disconnect():
     dead = [k for k, v in _online.items() if v == request.sid]
     for k in dead:
         _online.pop(k, None)
+    # Broadcast updated online list to all connected clients
+    socketio.emit("online_update", list(_online.keys()))
 
 
 @socketio.on("send_message")

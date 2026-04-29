@@ -1,5 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { loadKeys } from "./App";
+import { DHKeyPair, bytesToHex } from "./crypto/dh.js";
+import { x3dhSender, x3dhReceiver, hkdf } from "./crypto/x3dh.js";
+import { RatchetSession } from "./crypto/ratchet.js";
 
 const API = "http://localhost:5001";
 
@@ -14,20 +17,20 @@ function CopyBtn({ value }) {
   }
   return (
     <button onClick={copy}
-      className="text-[9px] text-gray-600 hover:text-gray-300 flex-shrink-0 mt-0.5 ml-2">
+      className="text-[9px] text-slate-400 hover:text-sky-500 flex-shrink-0 mt-0.5 ml-2 transition">
       {copied ? "✓" : "copy"}
     </button>
   );
 }
 
 function Row({ label, value, mono = true, highlight }) {
-  const colourClass = highlight === "green"  ? "text-green-400"
-                    : highlight === "yellow" ? "text-yellow-400"
+  const colourClass = highlight === "green"  ? "text-sky-600"
+                    : highlight === "yellow" ? "text-amber-600"
                     : highlight === "red"    ? "text-red-400"
-                    : "text-green-400";
+                    : "text-sky-700";
   return (
-    <div className="flex flex-col gap-0.5 py-1 border-b border-white/5">
-      <span className="text-[10px] text-gray-500 uppercase tracking-wider">{label}</span>
+    <div className="flex flex-col gap-0.5 py-1 border-b border-sky-100">
+      <span className="text-[10px] text-slate-400 uppercase tracking-wider">{label}</span>
       <div className="flex items-start">
         <span className={`text-[11px] break-all flex-1 ${mono ? "font-mono" : ""} ${colourClass}`}>
           {value ?? "—"}
@@ -38,10 +41,10 @@ function Row({ label, value, mono = true, highlight }) {
   );
 }
 
-function Section({ title, children, colour = "cc0000" }) {
+function Section({ title, children }) {
   return (
     <div className="mb-5">
-      <div className={`text-[10px] text-[#${colour}] font-bold uppercase tracking-widest mb-1`}>
+      <div className="text-[10px] text-sky-500 font-bold uppercase tracking-widest mb-1">
         {title}
       </div>
       {children}
@@ -50,10 +53,10 @@ function Section({ title, children, colour = "cc0000" }) {
 }
 
 function Badge({ label, colour }) {
-  const cls = colour === "green"  ? "bg-green-900/50 text-green-400"
-            : colour === "yellow" ? "bg-yellow-900/50 text-yellow-400"
-            : colour === "blue"   ? "bg-blue-900/50 text-blue-400"
-            :                       "bg-[#cc0000]/30 text-[#cc0000]";
+  const cls = colour === "green"  ? "bg-green-100 text-green-700"
+            : colour === "yellow" ? "bg-amber-100 text-amber-700"
+            : colour === "blue"   ? "bg-sky-100 text-sky-700"
+            :                       "bg-red-100 text-red-500";
   return (
     <span className={`text-[9px] px-2 py-0.5 rounded font-bold ${cls}`}>{label}</span>
   );
@@ -99,7 +102,7 @@ function KeysTab({ user, selected, sess }) {
           <Row label="Peer SPK (public)" value={String(sess._peerBundle.spk_pub)} />
           <Row label="Peer OPK (public)" value={String(sess._peerBundle.opk_pub ?? "exhausted")} />
           <Row label="Peer Fingerprint"  value={sess._peerBundle.fingerprint} highlight="green" />
-          <div className="mt-2 text-[10px] text-gray-600">
+          <div className="mt-2 text-[10px] text-slate-400">
             The server only ever stores these <em>public</em> keys.
             Private keys are generated in the browser and never transmitted.
           </div>
@@ -115,26 +118,26 @@ function X3DHTab({ user, selected, sess }) {
 
   return (
     <>
-      <div className="mb-4 text-[11px] text-gray-400 leading-relaxed">
+      <div className="mb-4 text-[11px] text-slate-500 leading-relaxed">
         X3DH (Extended Triple Diffie-Hellman) establishes a shared secret between two parties
         who have never spoken before — using only public keys exchanged via an untrusted server.
         Four DH operations are combined, giving both authentication and forward secrecy.
       </div>
 
       {!selected && (
-        <div className="text-gray-600 text-[11px] mt-4 text-center">
+        <div className="text-slate-400 text-[11px] mt-4 text-center">
           Select a conversation to see X3DH details
         </div>
       )}
 
       {selected && !sess && (
-        <div className="text-gray-600 text-[11px] mt-4 text-center">
+        <div className="text-slate-400 text-[11px] mt-4 text-center">
           No session yet — send a message first
         </div>
       )}
 
       {sess && !debug && (
-        <div className="text-gray-600 text-[11px] mt-4 text-center">
+        <div className="text-slate-400 text-[11px] mt-4 text-center">
           X3DH debug data not captured — start a fresh conversation
         </div>
       )}
@@ -147,7 +150,7 @@ function X3DHTab({ user, selected, sess }) {
                 label={debug.role === "initiator" ? "INITIATOR (Alice)" : "RESPONDER (Bob)"}
                 colour={debug.role === "initiator" ? "green" : "blue"}
               />
-              <span className="text-[10px] text-gray-500">
+              <span className="text-[10px] text-slate-400">
                 {debug.role === "initiator"
                   ? "You sent the first message and ran X3DH sender-side"
                   : "You received the first message and ran X3DH receiver-side"}
@@ -169,7 +172,7 @@ function X3DHTab({ user, selected, sess }) {
                 highlight={colour}
               />
             ))}
-            <div className="mt-2 text-[10px] text-gray-600">
+            <div className="mt-2 text-[10px] text-slate-400">
               Each DH output is g^(priv_a · priv_b) mod p — a 256-byte value.
               All four are concatenated (with 0xFF padding) and fed into HKDF.
             </div>
@@ -177,7 +180,7 @@ function X3DHTab({ user, selected, sess }) {
 
           <Section title="Shared Secret (SK) — derived via HKDF-SHA256">
             <Row label="SK (full 32 bytes / 64 hex chars)" value={debug.sk} highlight="green" />
-            <div className="mt-2 text-[10px] text-gray-600">
+            <div className="mt-2 text-[10px] text-slate-400">
               Alice and Bob compute this independently from different DH halves.
               They arrive at the same SK without ever transmitting it.
               The server never sees any of the inputs or outputs above.
@@ -198,7 +201,7 @@ function X3DHTab({ user, selected, sess }) {
                    value={String(sess._initHeader.ek_pub)} />
               <Row label="Sender IK public — sent to server"
                    value={String(sess._initHeader.sender_ik_pub)} />
-              <div className="mt-2 text-[10px] text-gray-600">
+              <div className="mt-2 text-[10px] text-slate-400">
                 Bob uses EK_pub + Sender_IK_pub (plus his own private keys) to derive
                 the same four DH values and reconstruct SK — without any help from the server.
               </div>
@@ -220,16 +223,16 @@ function RatchetTab({ selected, sess }) {
 
   return (
     <>
-      <div className="mb-4 text-[11px] text-gray-400 leading-relaxed">
+      <div className="mb-4 text-[11px] text-slate-500 leading-relaxed">
         The Double Ratchet combines a <em>symmetric-key ratchet</em> (one key per message,
         forward secrecy) with a <em>DH ratchet</em> (new ephemeral key per reply, break-in recovery).
       </div>
 
       {!selected && (
-        <div className="text-gray-600 text-[11px] mt-4 text-center">Select a conversation</div>
+        <div className="text-slate-400 text-[11px] mt-4 text-center">Select a conversation</div>
       )}
       {selected && !sess && (
-        <div className="text-gray-600 text-[11px] mt-4 text-center">
+        <div className="text-slate-400 text-[11px] mt-4 text-center">
           No session yet — send a message first
         </div>
       )}
@@ -247,7 +250,7 @@ function RatchetTab({ selected, sess }) {
             <Row label="Root Key (RK)"          value={hex8(sess.rootKey)} highlight="yellow" />
             <Row label="Sending Chain Key (CKs)" value={hex8(sess.sendingChainKey)} highlight="green" />
             <Row label="Recv Chain Key (CKr)"    value={hex8(sess.recvChainKey)} highlight="blue" />
-            <div className="mt-2 text-[10px] text-gray-600">
+            <div className="mt-2 text-[10px] text-slate-400">
               Each chain key produces one message key (MK) then advances to the next CK.
               The previous CK is deleted — a compromised device cannot decrypt past messages.
             </div>
@@ -281,43 +284,43 @@ function RatchetTab({ selected, sess }) {
 function MessagesTab({ selected, messageLog }) {
   return (
     <>
-      <div className="text-[10px] text-gray-600 mb-3">
+      <div className="text-[10px] text-slate-400 mb-3">
         Wire-level log — what actually travels over the network to/from the server.
         Plaintext never appears here; this is exactly what the server stores.
       </div>
 
       {(!messageLog || messageLog.length === 0) && (
-        <div className="text-gray-600 text-[11px] text-center mt-4">
+        <div className="text-slate-400 text-[11px] text-center mt-4">
           No messages yet — send one to see the encrypted wire format
         </div>
       )}
 
       {(messageLog || []).map((entry, i) => (
-        <div key={i} className="mb-3 border border-white/5 rounded p-2 bg-black/20">
+        <div key={i} className="mb-3 border border-sky-100 rounded p-2 bg-sky-50">
           <div className="flex items-center gap-2 mb-2">
             <Badge label={entry.dir === "out" ? "SENT" : "RECV"}
                    colour={entry.dir === "out" ? "red" : "blue"} />
-            <span className="text-[10px] text-gray-500">{new Date(entry.ts).toLocaleTimeString()}</span>
+            <span className="text-[10px] text-slate-400">{new Date(entry.ts).toLocaleTimeString()}</span>
             <Badge label="AES-256-GCM" colour="green" />
           </div>
 
-          <div className="text-[10px] text-gray-500 mb-0.5">
+          <div className="text-[10px] text-slate-400 mb-0.5">
             Ciphertext (base64 — what server stores, cannot read):
           </div>
-          <div className="text-[11px] text-green-400 break-all font-mono mb-2 bg-black/30 p-1 rounded">
+          <div className="text-[11px] text-sky-700 break-all font-mono mb-2 bg-white p-1 rounded border border-sky-100">
             {entry.ciphertext
               ? entry.ciphertext.slice(0, 80) + (entry.ciphertext.length > 80 ? "…" : "")
               : "—"}
           </div>
 
-          <div className="text-[10px] text-gray-500 mb-0.5">Double Ratchet header:</div>
-          <div className="text-[10px] text-yellow-500 font-mono bg-black/30 p-1 rounded">
+          <div className="text-[10px] text-slate-400 mb-0.5">Double Ratchet header:</div>
+          <div className="text-[10px] text-amber-600 font-mono bg-white p-1 rounded border border-sky-100">
             msg_n={entry.header?.n ?? "?"}&nbsp;&nbsp;
             prev_n={entry.header?.pn ?? "?"}&nbsp;&nbsp;
             ratchet_pub={String(entry.header?.dh ?? "").slice(0, 16)}…
           </div>
 
-          <div className="text-[10px] text-gray-600 mt-1.5 italic">
+          <div className="text-[10px] text-slate-400 mt-1.5 italic">
             {entry.dir === "out"
               ? "↑ Encrypted in browser before leaving device — server sees only bytes above"
               : "↓ Arrived as bytes above — decrypted in browser after receipt"}
@@ -345,53 +348,53 @@ function ServerTab({ user, selected }) {
 
   return (
     <>
-      <div className="mb-3 text-[11px] text-gray-400 leading-relaxed">
+      <div className="mb-3 text-[11px] text-slate-500 leading-relaxed">
         This is exactly what the server has stored in SQLite — raw ciphertext blobs.
         The server has no keys and cannot decrypt any of these messages.
       </div>
 
       {!selected && (
-        <div className="text-gray-600 text-[11px] text-center mt-4">
+        <div className="text-slate-400 text-[11px] text-center mt-4">
           Select a conversation to query the server
         </div>
       )}
 
       {loading && (
-        <div className="text-gray-500 text-[11px] text-center mt-4 animate-pulse">
+        <div className="text-slate-400 text-[11px] text-center mt-4 animate-pulse">
           Fetching from server…
         </div>
       )}
 
       {error && (
-        <div className="text-red-500 text-[11px] text-center mt-4">
+        <div className="text-red-400 text-[11px] text-center mt-4">
           Error: {error}
         </div>
       )}
 
       {history && history.length === 0 && (
-        <div className="text-gray-600 text-[11px] text-center mt-4">
+        <div className="text-slate-400 text-[11px] text-center mt-4">
           No messages stored on server yet
         </div>
       )}
 
       {history && history.length > 0 && (
         <>
-          <div className="text-[10px] text-gray-500 mb-3">
+          <div className="text-[10px] text-slate-400 mb-3">
             {history.length} message{history.length !== 1 ? "s" : ""} stored in SQLite
             — sender / recipient visible, payload opaque
           </div>
           {history.slice().reverse().map((m, i) => (
-            <div key={i} className="mb-2 border border-white/5 rounded p-2 bg-black/20">
+            <div key={i} className="mb-2 border border-sky-100 rounded p-2 bg-sky-50">
               <div className="flex items-center gap-2 mb-1">
-                <span className="text-[10px] text-gray-400 font-mono">
+                <span className="text-[10px] text-slate-500 font-mono">
                   {m.sender} → {m.recipient}
                 </span>
-                <span className="ml-auto text-[9px] text-gray-600">
+                <span className="ml-auto text-[9px] text-slate-400">
                   {m.sent_at ? new Date(m.sent_at * 1000).toLocaleTimeString() : ""}
                 </span>
               </div>
-              <div className="text-[10px] text-gray-500 mb-0.5">Stored payload (server-side view):</div>
-              <div className="text-[11px] text-green-400 font-mono break-all bg-black/30 p-1 rounded">
+              <div className="text-[10px] text-slate-400 mb-0.5">Stored payload (server-side view):</div>
+              <div className="text-[11px] text-sky-700 font-mono break-all bg-white p-1 rounded border border-sky-100">
                 {(() => {
                   try {
                     const p = typeof m.payload === "string" ? JSON.parse(m.payload) : m.payload;
@@ -406,14 +409,14 @@ function ServerTab({ user, selected }) {
                 try {
                   const p = typeof m.payload === "string" ? JSON.parse(m.payload) : m.payload;
                   if (p?.header) return (
-                    <div className="text-[10px] text-yellow-600 font-mono mt-1">
+                    <div className="text-[10px] text-amber-600 font-mono mt-1">
                       header: msg_n={p.header.n} prev_n={p.header.pn}
                     </div>
                   );
                 } catch {}
                 return null;
               })()}
-              <div className="text-[10px] text-gray-700 mt-1 italic">
+              <div className="text-[10px] text-slate-400 mt-1 italic">
                 Server sees routing metadata only — payload is encrypted ciphertext
               </div>
             </div>
@@ -424,9 +427,237 @@ function ServerTab({ user, selected }) {
   );
 }
 
+// ── browser test suite ───────────────────────────────────────────────────────
+
+async function runBrowserTests(log) {
+  let passed = 0;
+  let failed = 0;
+
+  function pass(name, detail) {
+    passed++;
+    log({ status: "pass", name, detail });
+  }
+  function fail(name, detail) {
+    failed++;
+    log({ status: "fail", name, detail });
+  }
+
+  async function makeSessionPair() {
+    const aliceIK = new DHKeyPair();
+    const bobIK   = new DHKeyPair();
+    const bobSPK  = new DHKeyPair();
+    const bobOPK  = new DHKeyPair();
+
+    const bundle = {
+      ik_pub:  bobIK.publicKey.toString(16),
+      spk_pub: bobSPK.publicKey.toString(16),
+      opk_pub: bobOPK.publicKey.toString(16),
+    };
+
+    const { sk: skAlice, ekPub, senderIKPub } = await x3dhSender(aliceIK, bundle);
+
+    const { sk: skBob } = await x3dhReceiver(
+      { ik: bobIK, spk: bobSPK, opk: bobOPK },
+      senderIKPub.toString(16),
+      ekPub.toString(16),
+    );
+
+    const alice = new RatchetSession();
+    await alice.initSender(skAlice, bobSPK.publicKey);
+
+    const bob = new RatchetSession();
+    await bob.initReceiver(skBob, alice.sendRatchet.publicKey, bobSPK);
+
+    return { alice, bob, skAlice, skBob };
+  }
+
+  try {
+    log({ status: "running", name: "1. DH Correctness" });
+    const a = new DHKeyPair();
+    const b = new DHKeyPair();
+    const s1 = bytesToHex(a.dh(b.publicKey));
+    const s2 = bytesToHex(b.dh(a.publicKey));
+    if (s1 !== s2) throw new Error("Shared secrets differ");
+    pass("1. DH Correctness", `DH(a,B) = DH(b,A) = ${s1.slice(0,16)}…`);
+  } catch(e) { fail("1. DH Correctness", e.message); }
+
+  try {
+    log({ status: "running", name: "2. X3DH Key Agreement" });
+    const { skAlice, skBob } = await makeSessionPair();
+    const hexA = bytesToHex(skAlice);
+    const hexB = bytesToHex(skBob);
+    if (hexA !== hexB) throw new Error(`SK mismatch: ${hexA.slice(0,8)} vs ${hexB.slice(0,8)}`);
+    pass("2. X3DH Key Agreement", `Both derived SK = ${hexA.slice(0,16)}… independently`);
+  } catch(e) { fail("2. X3DH Key Agreement", e.message); }
+
+  try {
+    log({ status: "running", name: "3. Double Ratchet" });
+    const { alice, bob } = await makeSessionPair();
+    const msgs = ["Hello Bob!", "How are you?", "Signal works!"];
+    for (const m of msgs) {
+      const enc = await alice.encrypt(m);
+      const dec = await bob.decrypt(enc);
+      if (dec !== m) throw new Error(`Mismatch: expected "${m}" got "${dec}"`);
+    }
+    pass("3. Double Ratchet", `${msgs.length} messages encrypted & decrypted — each with a distinct AES-256-GCM key`);
+  } catch(e) { fail("3. Double Ratchet", e.message); }
+
+  try {
+    log({ status: "running", name: "4. Forward Secrecy" });
+    const { alice, bob } = await makeSessionPair();
+    const ckBefore = bytesToHex(alice.sendingChainKey);
+    const enc = await alice.encrypt("forward secrecy test");
+    const ckAfter = bytesToHex(alice.sendingChainKey);
+    if (ckBefore === ckAfter) throw new Error("Chain key did not advance — forward secrecy broken");
+    const dec = await bob.decrypt(enc);
+    if (dec !== "forward secrecy test") throw new Error("Decryption mismatch");
+    let reDecryptFailed = false;
+    try { await bob.decrypt(enc); } catch { reDecryptFailed = true; }
+    if (!reDecryptFailed) throw new Error("Same message decrypted twice — message key was not consumed!");
+    pass("4. Forward Secrecy",
+      `CK before: ${ckBefore.slice(0,8)}… → CK after: ${ckAfter.slice(0,8)}… (advanced, old key deleted). Re-decryption blocked ✓`);
+  } catch(e) { fail("4. Forward Secrecy", e.message); }
+
+  try {
+    log({ status: "running", name: "5. Server Blindness" });
+    const { alice } = await makeSessionPair();
+    const plaintext = "Top secret UIC message";
+    const enc = await alice.encrypt(plaintext);
+    const ctBytes = enc.ciphertext;
+    if (ctBytes.includes("Top") || ctBytes.includes("secret") || ctBytes.includes("UIC"))
+      throw new Error("Plaintext found in ciphertext!");
+    pass("5. Server Blindness", `Ciphertext: ${ctBytes.slice(0,32)}… — plaintext not present`);
+  } catch(e) { fail("5. Server Blindness", e.message); }
+
+  try {
+    log({ status: "running", name: "6. Bidirectional + DH Ratchet" });
+    const { alice, bob } = await makeSessionPair();
+    await bob.decrypt(await alice.encrypt("Hey Bob"));
+    const rk1 = bytesToHex(bob.rootKey);
+    await alice.decrypt(await bob.encrypt("Hey Alice"));
+    const rk2 = bytesToHex(alice.rootKey);
+    await bob.decrypt(await alice.encrypt("Again"));
+    const rk3 = bytesToHex(bob.rootKey);
+    if (rk1 === rk2 || rk2 === rk3) throw new Error("Root key did not rotate on direction change");
+    pass("6. Bidirectional + DH Ratchet", `Root key rotated: ${rk1.slice(0,8)}… → ${rk2.slice(0,8)}… → ${rk3.slice(0,8)}…`);
+  } catch(e) { fail("6. Bidirectional + DH Ratchet", e.message); }
+
+  try {
+    log({ status: "running", name: "7. Break-in Recovery" });
+    const { alice, bob } = await makeSessionPair();
+    await bob.decrypt(await alice.encrypt("msg 1"));
+    await alice.decrypt(await bob.encrypt("msg 2"));
+    const stolen = alice.sendingChainKey.slice();
+    await bob.decrypt(await alice.encrypt("msg 3"));
+    await alice.decrypt(await bob.encrypt("msg 4"));
+    const newCK = bytesToHex(alice.sendingChainKey);
+    if (bytesToHex(stolen) === newCK) throw new Error("Chain key was not rotated");
+    pass("7. Break-in Recovery", `Stolen key ${bytesToHex(stolen).slice(0,8)}… replaced by ${newCK.slice(0,8)}… after DH ratchet`);
+  } catch(e) { fail("7. Break-in Recovery", e.message); }
+
+  try {
+    log({ status: "running", name: "8. Out-of-Order Messages" });
+    const { alice, bob } = await makeSessionPair();
+    const a = await alice.encrypt("First");
+    const b = await alice.encrypt("Second");
+    const c = await alice.encrypt("Third");
+    const r1 = await bob.decrypt(c);
+    const r2 = await bob.decrypt(a);
+    const r3 = await bob.decrypt(b);
+    if (r1 !== "Third" || r2 !== "First" || r3 !== "Second")
+      throw new Error(`Wrong order: ${r1}, ${r2}, ${r3}`);
+    pass("8. Out-of-Order Messages", `Delivered C→A→B, decrypted: "${r1}", "${r2}", "${r3}" ✓`);
+  } catch(e) { fail("8. Out-of-Order Messages", e.message); }
+
+  try {
+    log({ status: "running", name: "9. Key Uniqueness" });
+    const { alice } = await makeSessionPair();
+    const cts = await Promise.all(Array.from({length: 10}, (_, i) => alice.encrypt(`msg ${i}`)));
+    const ctSet = new Set(cts.map(e => e.ciphertext));
+    if (ctSet.size !== 10) throw new Error("Duplicate ciphertext — key reuse detected!");
+    pass("9. Key Uniqueness", `10 messages → 10 distinct ciphertexts — no AES key reused`);
+  } catch(e) { fail("9. Key Uniqueness", e.message); }
+
+  return { passed, failed, total: passed + failed };
+}
+
+function TestsTab() {
+  const [results, setResults] = useState([]);
+  const [running, setRunning] = useState(false);
+  const [summary, setSummary] = useState(null);
+
+  async function run() {
+    setResults([]);
+    setSummary(null);
+    setRunning(true);
+    const logs = [];
+    const { passed, failed, total } = await runBrowserTests(entry => {
+      logs.push(entry);
+      setResults([...logs]);
+    });
+    setSummary({ passed, failed, total });
+    setRunning(false);
+  }
+
+  return (
+    <>
+      <div className="mb-3 text-[11px] text-slate-500 leading-relaxed">
+        Runs the Signal Protocol test suite directly in this browser tab — using the exact
+        same <span className="text-sky-600 font-mono">dh.js · x3dh.js · ratchet.js</span> that
+        encrypts your real messages. No Python, no server.
+      </div>
+
+      <button
+        onClick={run}
+        disabled={running}
+        className="w-full py-2 mb-4 rounded text-[11px] font-bold transition text-white
+                   bg-red-400 hover:bg-red-500 disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        {running ? "Running…" : "▶ Run Browser Tests"}
+      </button>
+
+      {results.map((r, i) => (
+        <div key={i} className={`mb-2 rounded p-2 border text-[11px] font-mono
+          ${r.status === "pass" ? "border-green-200 bg-green-50"
+          : r.status === "fail" ? "border-red-200 bg-red-50"
+          :                       "border-sky-100 bg-sky-50"}`}>
+          <div className="flex items-center gap-2">
+            <span className={
+              r.status === "pass" ? "text-green-600" :
+              r.status === "fail" ? "text-red-500"   : "text-slate-400 animate-pulse"
+            }>
+              {r.status === "pass" ? "✓" : r.status === "fail" ? "✗" : "…"}
+            </span>
+            <span className={
+              r.status === "pass" ? "text-green-700" :
+              r.status === "fail" ? "text-red-600"   : "text-slate-500"
+            }>
+              {r.name}
+            </span>
+          </div>
+          {r.detail && (
+            <div className="mt-1 text-[10px] text-slate-500 pl-4 break-all">{r.detail}</div>
+          )}
+        </div>
+      ))}
+
+      {summary && (
+        <div className={`mt-3 p-3 rounded text-center text-[12px] font-bold border
+          ${summary.failed === 0
+            ? "border-green-300 bg-green-50 text-green-700"
+            : "border-red-300 bg-red-50 text-red-500"}`}>
+          {summary.failed === 0
+            ? `✓ ALL ${summary.total} TESTS PASSED — browser crypto verified`
+            : `✗ ${summary.failed} / ${summary.total} FAILED`}
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── main panel ────────────────────────────────────────────────────────────────
 
-const TABS = ["keys", "x3dh", "ratchet", "messages", "server"];
+const TABS = ["keys", "x3dh", "ratchet", "messages", "server", "tests"];
 
 export default function DevPanel({ user, selected, sessions, messageLog }) {
   const [open, setOpen] = useState(false);
@@ -435,50 +666,48 @@ export default function DevPanel({ user, selected, sessions, messageLog }) {
   const sess = selected ? sessions[selected] : null;
 
   return (
-    <div className="fixed bottom-0 right-0 z-50 font-mono">
-      {/* Toggle button */}
+    <div className="fixed bottom-0 left-0 z-50 font-mono">
       <button
         onClick={() => setOpen(o => !o)}
-        className="absolute bottom-0 right-0 bg-[#0a1628] border border-[#cc0000]/40
-                   text-[#cc0000] text-[11px] px-3 py-1.5 rounded-tl-lg hover:bg-[#cc0000]/10 transition"
+        className="absolute bottom-0 left-0 bg-white border border-sky-200
+                   text-sky-500 text-[11px] px-3 py-1.5 rounded-tr-lg hover:bg-sky-50 transition"
       >
         {open ? "✕ dev panel" : "⚙ dev panel"}
       </button>
 
       {open && (
-        <div className="w-[460px] h-[600px] bg-[#080f1e] border border-[#cc0000]/30 rounded-tl-xl
-                        flex flex-col shadow-2xl mb-7 mr-0">
-          {/* Header */}
-          <div className="px-4 py-2 border-b border-[#cc0000]/20 flex items-center gap-2">
-            <span className="text-[#cc0000] text-xs font-bold">
+        <div className="w-[460px] h-[600px] bg-white border border-sky-200 rounded-tr-xl
+                        flex flex-col shadow-2xl mb-7 ml-0">
+          <div className="px-4 py-2 border-b border-sky-100 flex items-center gap-2">
+            <span className="text-sky-600 text-xs font-bold">
               Signal Protocol — Developer View
             </span>
-            <span className="ml-auto text-[10px] text-gray-600">@{user.net_id}</span>
+            <span className="ml-auto text-[10px] text-slate-400">@{user.net_id}</span>
           </div>
 
-          {/* Tabs */}
-          <div className="flex border-b border-white/5 text-[11px] overflow-x-auto">
+          <div className="flex border-b border-sky-100 text-[11px] overflow-x-auto">
             {TABS.map(t => (
               <button key={t} onClick={() => setTab(t)}
                 className={`px-3 py-1.5 capitalize whitespace-nowrap transition
                   ${tab === t
-                    ? "text-[#cc0000] border-b-2 border-[#cc0000]"
-                    : "text-gray-600 hover:text-gray-400"}`}>
-                {t === "x3dh"   ? "X3DH"
-                 : t === "keys" ? "Keys"
+                    ? "text-sky-500 border-b-2 border-sky-500"
+                    : "text-slate-400 hover:text-slate-600"}`}>
+                {t === "x3dh"    ? "X3DH"
+                 : t === "keys"   ? "Keys"
                  : t === "server" ? "Server View"
+                 : t === "tests"  ? "▶ Tests"
                  : t.charAt(0).toUpperCase() + t.slice(1)}
               </button>
             ))}
           </div>
 
-          {/* Content */}
           <div className="flex-1 overflow-y-auto p-4 text-xs">
             {tab === "keys"     && <KeysTab     user={user} selected={selected} sess={sess} />}
             {tab === "x3dh"     && <X3DHTab     user={user} selected={selected} sess={sess} />}
             {tab === "ratchet"  && <RatchetTab  selected={selected} sess={sess} />}
             {tab === "messages" && <MessagesTab selected={selected} messageLog={messageLog} />}
             {tab === "server"   && <ServerTab   user={user} selected={selected} />}
+            {tab === "tests"    && <TestsTab />}
           </div>
         </div>
       )}
