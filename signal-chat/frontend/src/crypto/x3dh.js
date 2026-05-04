@@ -24,11 +24,44 @@ export async function hkdf(ikm, salt = new Uint8Array(32), info = X3DH_INFO, len
   return new Uint8Array(bits);
 }
 
+// Verify that the SPK in a pre-key bundle was genuinely signed by the bundle owner's
+// ECDSA identity signing key.  Throws if the signature is missing or invalid.
+export async function verifySPKSignature(bundle) {
+  if (!bundle.ik_sign_pub || !bundle.spk_sig) {
+    throw new Error("Pre-key bundle is missing SPK signature fields — possible tampering");
+  }
+
+  const rawPub  = Uint8Array.from(atob(bundle.ik_sign_pub), c => c.charCodeAt(0));
+  const sigBytes = Uint8Array.from(atob(bundle.spk_sig),    c => c.charCodeAt(0));
+  const spkBytes = new TextEncoder().encode(bundle.spk_pub);
+
+  const pubKey = await crypto.subtle.importKey(
+    "raw",
+    rawPub,
+    { name: "ECDSA", namedCurve: "P-256" },
+    false,
+    ["verify"]
+  );
+
+  const valid = await crypto.subtle.verify(
+    { name: "ECDSA", hash: { name: "SHA-256" } },
+    pubKey,
+    sigBytes,
+    spkBytes
+  );
+
+  if (!valid) throw new Error("SPK signature verification FAILED — server may have substituted a different SPK");
+  console.log("[X3DH] SPK signature verified OK");
+}
+
 // Sender-side X3DH (Alice's browser)
 // senderIK      — DHKeyPair (Alice's identity key, private in localStorage)
-// recipientBundle — { ik_pub, spk_pub, opk_pub } hex strings from server
+// recipientBundle — { ik_pub, spk_pub, opk_pub, ik_sign_pub, spk_sig } from server
 // Returns { sk, ekPub (BigInt), senderIKPub (BigInt) }
 export async function x3dhSender(senderIK, recipientBundle) {
+  // Verify the SPK was signed by the recipient's identity signing key
+  // before doing any DH.  If the server swapped the SPK, this throws.
+  await verifySPKSignature(recipientBundle);
   const ek = new DHKeyPair();  // ephemeral key, generated fresh each session
 
   const rik  = hexToBigInt(recipientBundle.ik_pub);

@@ -15,11 +15,13 @@ def init_db():
     with get_conn() as conn:
         conn.executescript("""
             CREATE TABLE IF NOT EXISTS users (
-                net_id      TEXT PRIMARY KEY,
-                password    TEXT NOT NULL,
-                ik_pub      TEXT NOT NULL,
-                spk_pub     TEXT NOT NULL,
-                fingerprint TEXT NOT NULL
+                net_id       TEXT PRIMARY KEY,
+                password     TEXT NOT NULL,
+                ik_pub       TEXT NOT NULL,
+                spk_pub      TEXT NOT NULL,
+                ik_sign_pub  TEXT,
+                spk_sig      TEXT,
+                fingerprint  TEXT NOT NULL
             );
 
             CREATE TABLE IF NOT EXISTS prekeys (
@@ -52,15 +54,22 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_messages_pair
                 ON messages (sender, recipient, sent_at);
         """)
+        # Migrate existing databases that pre-date SPK signing columns
+        for col in ("ik_sign_pub", "spk_sig"):
+            try:
+                conn.execute(f"ALTER TABLE users ADD COLUMN {col} TEXT")
+            except Exception:
+                pass
 
 
-def register_user(net_id: str, password: str, ik_pub: str, spk_pub: str, opk_pubs: list[str]) -> bool:
+def register_user(net_id: str, password: str, ik_pub: str, spk_pub: str, opk_pubs: list[str],
+                  ik_sign_pub: str = None, spk_sig: str = None) -> bool:
     fingerprint = f"{ik_pub[:8].upper()}:{spk_pub[:8].upper()}"
     try:
         with get_conn() as conn:
             conn.execute(
-                "INSERT INTO users (net_id, password, ik_pub, spk_pub, fingerprint) VALUES (?,?,?,?,?)",
-                (net_id, password, ik_pub, spk_pub, fingerprint),
+                "INSERT INTO users (net_id, password, ik_pub, spk_pub, ik_sign_pub, spk_sig, fingerprint) VALUES (?,?,?,?,?,?,?)",
+                (net_id, password, ik_pub, spk_pub, ik_sign_pub, spk_sig, fingerprint),
             )
             conn.executemany(
                 "INSERT INTO prekeys (net_id, opk_pub) VALUES (?,?)",
@@ -87,9 +96,12 @@ def get_prekey_bundle(net_id: str) -> dict | None:
         if opk:
             conn.execute("UPDATE prekeys SET used=1 WHERE id=?", (opk["id"],))
         return {
-            "ik_pub":      user["ik_pub"],   # hex string — returned as-is
+            "ik_pub":      user["ik_pub"],
             "spk_pub":     user["spk_pub"],
             "opk_pub":     opk["opk_pub"] if opk else None,
+            "ik_sign_pub": user["ik_sign_pub"],
+            "spk_sig":     user["spk_sig"],
+            # "spk_sig":     "AAUHUSHUSH",
             "fingerprint": user["fingerprint"],
         }
 

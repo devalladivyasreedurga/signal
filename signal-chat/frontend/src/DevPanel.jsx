@@ -448,10 +448,27 @@ async function runBrowserTests(log) {
     const bobSPK  = new DHKeyPair();
     const bobOPK  = new DHKeyPair();
 
+    // Generate a real ECDSA P-256 signing key pair for Bob so that
+    // verifySPKSignature() inside x3dhSender() passes.
+    const signingKeyPair = await crypto.subtle.generateKey(
+      { name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]
+    );
+    const spkPubHex = bobSPK.publicKey.toString(16);
+    const sigBytes  = await crypto.subtle.sign(
+      { name: "ECDSA", hash: { name: "SHA-256" } },
+      signingKeyPair.privateKey,
+      new TextEncoder().encode(spkPubHex)
+    );
+    const rawPub = await crypto.subtle.exportKey("raw", signingKeyPair.publicKey);
+    const ikSignPub = btoa(String.fromCharCode(...new Uint8Array(rawPub)));
+    const spkSig    = btoa(String.fromCharCode(...new Uint8Array(sigBytes)));
+
     const bundle = {
-      ik_pub:  bobIK.publicKey.toString(16),
-      spk_pub: bobSPK.publicKey.toString(16),
-      opk_pub: bobOPK.publicKey.toString(16),
+      ik_pub:      bobIK.publicKey.toString(16),
+      spk_pub:     spkPubHex,
+      opk_pub:     bobOPK.publicKey.toString(16),
+      ik_sign_pub: ikSignPub,
+      spk_sig:     spkSig,
     };
 
     const { sk: skAlice, ekPub, senderIKPub } = await x3dhSender(aliceIK, bundle);

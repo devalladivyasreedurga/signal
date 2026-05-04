@@ -6,11 +6,12 @@ const API = "http://localhost:5001";
 
 // ── Key storage ───────────────────────────────────────────────────
 
-function storeKeys(netId, keys) {
+function storeKeys(netId, keys, signData = null) {
   localStorage.setItem(`signal_keys_${netId}`, JSON.stringify({
     ik:   keys.ik.toJSON(),
     spk:  keys.spk.toJSON(),
     opks: keys.opks.map(k => k.toJSON()),
+    ...(signData && { signPrivJwk: signData.privJwk, ikSignPub: signData.ikSignPub }),
   }));
 }
 
@@ -62,26 +63,53 @@ export default function App() {
     e.preventDefault();
     setError(""); setLoading(true);
     try {
-      const ik  = new DHKeyPair();
-      const spk = new DHKeyPair();
+      const ik   = new DHKeyPair();
+      const spk  = new DHKeyPair();
       const opks = Array.from({ length: 10 }, () => new DHKeyPair());
+
+      // Generate an ECDSA P-256 signing key pair.  This is used to sign the SPK
+      // so that anyone who fetches our pre-key bundle can verify the SPK is genuine
+      // and was not swapped by the server (SPK signature per Signal spec).
+      const signingKeyPair = await crypto.subtle.generateKey(
+        { name: "ECDSA", namedCurve: "P-256" },
+        true,
+        ["sign", "verify"]
+      );
+
+      // Sign the SPK public key hex string with the signing private key
+      const spkPubHex = bigIntToHex(spk.publicKey);
+      const sigBytes  = await crypto.subtle.sign(
+        { name: "ECDSA", hash: { name: "SHA-256" } },
+        signingKeyPair.privateKey,
+        new TextEncoder().encode(spkPubHex)
+      );
+
+      // Export signing public key as raw bytes (65 bytes, uncompressed P-256 point)
+      const rawPub    = await crypto.subtle.exportKey("raw", signingKeyPair.publicKey);
+      const ikSignPub = btoa(String.fromCharCode(...new Uint8Array(rawPub)));
+      const spkSig    = btoa(String.fromCharCode(...new Uint8Array(sigBytes)));
+
+      // Export signing private key as JWK so we can re-sign if SPK is rotated later
+      const signPrivJwk = await crypto.subtle.exportKey("jwk", signingKeyPair.privateKey);
 
       const res = await fetch(`${API}/register`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          net_id:   netId.trim().toLowerCase(),
+          net_id:      netId.trim().toLowerCase(),
           password,
-          ik_pub:   bigIntToHex(ik.publicKey),
-          spk_pub:  bigIntToHex(spk.publicKey),
-          opk_pubs: opks.map(k => bigIntToHex(k.publicKey)),
+          ik_pub:      bigIntToHex(ik.publicKey),
+          spk_pub:     spkPubHex,
+          opk_pubs:    opks.map(k => bigIntToHex(k.publicKey)),
+          ik_sign_pub: ikSignPub,
+          spk_sig:     spkSig,
         }),
       });
       const data = await res.json();
       if (!res.ok) { setError(data.error); return; }
 
       clearSessionState(netId.trim().toLowerCase());
-      storeKeys(netId.trim().toLowerCase(), { ik, spk, opks });
+      storeKeys(netId.trim().toLowerCase(), { ik, spk, opks }, { privJwk: signPrivJwk, ikSignPub });
       setMode("login");
       setError("Registered! Please log in.");
     } catch {

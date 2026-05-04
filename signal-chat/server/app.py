@@ -36,17 +36,20 @@ def health():
 @app.route("/register", methods=["POST"])
 def register():
     data = request.json
-    net_id  = data.get("net_id", "").strip().lower()
-    password = data.get("password", "")
-    ik_pub  = data.get("ik_pub")
-    spk_pub = data.get("spk_pub")
-    opk_pubs = data.get("opk_pubs", [])  # list of hex strings
+    net_id      = data.get("net_id", "").strip().lower()
+    password    = data.get("password", "")
+    ik_pub      = data.get("ik_pub")
+    spk_pub     = data.get("spk_pub")
+    opk_pubs    = data.get("opk_pubs", [])
+    ik_sign_pub = data.get("ik_sign_pub")   # base64 raw ECDSA P-256 public key
+    spk_sig     = data.get("spk_sig")       # base64 ECDSA signature over spk_pub hex
 
     if not all([net_id, password, ik_pub, spk_pub, opk_pubs]):
         return jsonify({"error": "Missing fields"}), 400
 
     pw_hash = hashlib.sha256(password.encode()).hexdigest()
-    ok = register_user(net_id, pw_hash, str(ik_pub), str(spk_pub), [str(o) for o in opk_pubs])
+    ok = register_user(net_id, pw_hash, str(ik_pub), str(spk_pub), [str(o) for o in opk_pubs],
+                       ik_sign_pub=ik_sign_pub, spk_sig=spk_sig)
     if not ok:
         return jsonify({"error": "net_id already registered"}), 409
     return jsonify({"ok": True})
